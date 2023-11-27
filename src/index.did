@@ -2,8 +2,9 @@ service: () -> {
     addComment: (record {content:text; authorName:text}, principal) -> (variant {Ok:text; Err:text});
     createBlogPost: (record {title:text; content:text; author:text}) -> (variant {Ok:text; Err:text});
     deleteBlogPost: (principal) -> (variant {Ok:text; Err:text});
-    getBlogPosts: () -> (variant {Ok:vec record {id:principal; title:text; content:text; createdAt:nat64; author:text; commentIds:vec principal}; Err:text}) query;
+    getBlogPosts: () -> (variant {Ok:vec record {id:principal; title:text; content:text; createdAt:nat64; author:text; numberOfViews:int; commentIds:vec principal}; Err:text}) query;
     getCommentsByBlogPost: (principal) -> (variant {Ok:vec record {id:principal; content:text; createdAt:nat64; authorName:text; blogPostId:principal}; Err:text}) query;
-    getSingleBlogPost: (principal) -> (variant {Ok:opt record {id:principal; title:text; content:text; createdAt:nat64; author:text; commentIds:vec principal}; Err:text}) query;
+    getMostPopularBlogPosts: (int) -> (variant {Ok:vec record {id:principal; title:text; content:text; createdAt:nat64; author:text; numberOfViews:int; commentIds:vec principal}; Err:text}) query;
+    getSingleBlogPost: (principal) -> (variant {Ok:opt record {id:principal; title:text; content:text; createdAt:nat64; author:text; numberOfViews:int; commentIds:vec principal}; Err:text}) query;
     updateBlogPost: (record {title:text; content:text; author:text}, principal) -> (variant {Ok:text; Err:text});
 }

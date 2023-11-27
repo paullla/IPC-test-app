@@ -13,6 +13,7 @@ import {
     Ok,
     Result,
     ic,
+    int
 } from 'azle';
 
 const BlogPost = Record({
@@ -20,8 +21,10 @@ const BlogPost = Record({
     title: text,
     content: text,
     author: text,
-    commentIds: Vec(Principal),
     createdAt: nat64,
+    numberOfViews: int,
+    commentIds: Vec(Principal),
+
 });
 
 const BlogPostPayload = Record({
@@ -54,18 +57,24 @@ export default Canister({
     }),
 
     getSingleBlogPost: query([Principal], Result(Opt(BlogPost), text), (id) => {
-        const blogPost = blogPostStorage.get(id);
-        if (!blogPost) {
+        const blogPostOpt = blogPostStorage.get(id);
+        if (!blogPostOpt) {
             return Err(`a blog post with id=${id} not found`);
         }
 
-        return Ok(blogPost);
+        const blogPost = blogPostOpt.Some;
+
+        blogPost.numberOfViews += 1;
+        blogPostStorage.insert(blogPost.id, blogPost);
+
+        return Ok(blogPostOpt);
     }),
 
     createBlogPost: update([BlogPostPayload], Result(text, text), (payload) => {
         const blogPost: typeof BlogPost = {
             id: generateId(),
             createdAt: ic.time(),
+            numberOfViews: BigInt(0),
             commentIds: [],
             ...payload,
         }
@@ -137,7 +146,20 @@ export default Canister({
         );
 
         return Ok(blogPostComments);
-    })
+    }),
+
+    getMostPopularBlogPosts: query([int], Result(Vec(BlogPost), text), (numberOfBlogPosts) => {
+        const blogPosts = blogPostStorage.values()
+        blogPosts.sort((a: typeof BlogPost, b: typeof BlogPost) => {
+            const aPopularity = a.commentIds.length + Number(a.numberOfViews);
+            const bPopularity = b.commentIds.length + Number(b.numberOfViews);
+
+            return aPopularity - bPopularity;
+        });
+
+        return Ok(blogPosts.slice(0, Number(numberOfBlogPosts)));
+    }),
+
 });
 
 function generateId(): Principal {
