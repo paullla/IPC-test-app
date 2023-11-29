@@ -1,10 +1,33 @@
-service: () -> {
-    addComment: (record {content:text; authorName:text}, principal) -> (variant {Ok:text; Err:text});
-    createBlogPost: (record {title:text; content:text; author:text}) -> (variant {Ok:text; Err:text});
-    deleteBlogPost: (principal) -> (variant {Ok:text; Err:text});
-    getBlogPosts: () -> (variant {Ok:vec record {id:principal; title:text; content:text; createdAt:nat64; author:text; numberOfViews:int; commentIds:vec principal}; Err:text}) query;
-    getCommentsByBlogPost: (principal) -> (variant {Ok:vec record {id:principal; content:text; createdAt:nat64; authorName:text; blogPostId:principal}; Err:text}) query;
-    getMostPopularBlogPosts: (int) -> (variant {Ok:vec record {id:principal; title:text; content:text; createdAt:nat64; author:text; numberOfViews:int; commentIds:vec principal}; Err:text}) query;
-    getSingleBlogPost: (principal) -> (variant {Ok:opt record {id:principal; title:text; content:text; createdAt:nat64; author:text; numberOfViews:int; commentIds:vec principal}; Err:text}) query;
-    updateBlogPost: (record {title:text; content:text; author:text}, principal) -> (variant {Ok:text; Err:text});
+type BlogPost = record {
+  id : text;
+  title : text;
+  content : text;
+  createdAt : nat64;
+  author : text;
+  numberOfViews : int;
+  commentIds : vec text;
+};
+type BlogPostPayload = record { title : text; content : text; author : text };
+type CommentPayload = record { content : text; authorName : text };
+type CommentType = record {
+  id : text;
+  content : text;
+  createdAt : nat64;
+  authorName : text;
+  blogPostId : text;
+};
+type _AzleResult = variant { Ok : text; Err : text };
+type _AzleResult_1 = variant { Ok : vec BlogPost; Err : text };
+type _AzleResult_2 = variant { Ok : vec CommentType; Err : text };
+type _AzleResult_3 = variant { Ok : opt BlogPost; Err : text };
+type _AzleResult_4 = variant { Ok : BlogPost; Err : text };
+service : () -> {
+  addComment : (CommentPayload, text) -> (_AzleResult);
+  createBlogPost : (BlogPostPayload) -> (_AzleResult);
+  deleteBlogPost : (text) -> (_AzleResult);
+  getBlogPosts : () -> (_AzleResult_1) query;
+  getCommentsByBlogPost : (text) -> (_AzleResult_2) query;
+  getMostPopularBlogPosts : (int) -> (_AzleResult_1) query;
+  getSingleBlogPost : (text) -> (_AzleResult_3) query;
+  updateBlogPost : (BlogPostPayload, text) -> (_AzleResult_4);
 }

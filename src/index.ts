@@ -1,176 +1,253 @@
 import {
-    Canister,
-    query,
-    text,
-    update,
+    $query,
+    $update,
     Record,
     Opt,
     Vec,
     nat64,
     StableBTreeMap,
     Principal,
-    Err,
-    Ok,
+    match,
     Result,
     ic,
     int
 } from 'azle';
 
-const BlogPost = Record({
-    id: Principal,
-    title: text,
-    content: text,
-    author: text,
-    createdAt: nat64,
-    numberOfViews: int,
-    commentIds: Vec(Principal),
+import { v4 as uuidv4 } from 'uuid';
 
-});
+// Define BlogPost type
+type BlogPost = Record<{
+    id: string;
+    title: string;
+    content: string;
+    author: string;
+    createdAt: nat64;
+    numberOfViews: int;
+    commentIds: Vec<string>;
+}>;
 
-const BlogPostPayload = Record({
-    title: text,
-    content: text,
-    author: text,
-});
+// Define CommentType type
+type CommentType = Record<{
+    id: string;
+    authorName: string;
+    content: string;
+    createdAt: nat64;
+    blogPostId: string;
+}>;
 
-const Comment = Record({
-    id: Principal,
-    authorName: text,
-    content: text,
-    createdAt: nat64,
-    blogPostId: Principal,
-});
+// Define payload types
+type BlogPostPayload = Record<{
+    title: string;
+    content: string;
+    author: string;
+}>;
 
-const CommentPayload = Record({
-    authorName: text,
-    content: text,
-});
+type CommentPayload = Record<{
+    authorName: string;
+    content: string;
+}>;
 
-//make stable to persist state on updates
-const blogPostStorage = StableBTreeMap(Principal, BlogPost, 1);
-const commentStorage = StableBTreeMap(Principal, Comment, 2);
+// Create storage for blog posts and comments
+const blogPostStorage = new StableBTreeMap<string, BlogPost>(0, 44, 1024);
+const commentStorage = new StableBTreeMap<string, CommentType>(1, 44, 1024);
 
-export default Canister({
+// Query functions
 
-    getBlogPosts: query([], Result(Vec(BlogPost), text), () => {
-        return Ok(blogPostStorage.values());
-    }),
+// Retrieve all blog posts
+$query
+export function getBlogPosts(): Result<Vec<BlogPost>, string> {
+    try {
+        return Result.Ok(blogPostStorage.values());
+    } catch (error) {
+        return Result.Err<Vec<BlogPost>, string>('Failed while trying to get blog posts');
+    }
+};
 
-    getSingleBlogPost: query([Principal], Result(Opt(BlogPost), text), (id) => {
-        const blogPostOpt = blogPostStorage.get(id);
-        if (!blogPostOpt) {
-            return Err(`a blog post with id=${id} not found`);
+// Retrieve a single blog post and increment view count
+$query
+export function getSingleBlogPost(id: string): Result<Opt<BlogPost>, string> {
+    try {
+        // Validate parameters
+        if (!id) {
+            return Result.Err<Opt<BlogPost>, string>('Invalid parameters for getting a single blog post');
         }
 
-        const blogPost = blogPostOpt.Some;
+        const blogPostOpt = blogPostStorage.get(id);
 
-        blogPost.numberOfViews += 1;
-        blogPostStorage.insert(blogPost.id, blogPost);
+        return match(blogPostOpt, {
+            Some: (blogPost) => {
+                // Increment the number of views when a blog post is viewed
+                blogPost.numberOfViews += BigInt(1);
+                blogPostStorage.insert(blogPost.id, blogPost);
+                return Result.Ok<Opt<BlogPost>, string>(blogPostOpt);
+            },
+            None: () => Result.Err<Opt<BlogPost>, string>(`A blog post with id=${id} not found`),
+        });
+    } catch (error) {
+        return Result.Err<Opt<BlogPost>, string>('Failed while trying to get a blog post');
+    }
+}
 
-        return Ok(blogPostOpt);
-    }),
+// Update functions
 
-    createBlogPost: update([BlogPostPayload], Result(text, text), (payload) => {
-        const blogPost: typeof BlogPost = {
-            id: generateId(),
+// Create a new blog post
+$update
+export function createBlogPost(payload: BlogPostPayload): Result<string, string> {
+    try {
+        // Validate payload properties
+        if (!payload.title || !payload.content || !payload.author) {
+            return Result.Err<string, string>('Invalid payload for creating a blog post');
+        }
+
+        const blogPost: BlogPost = {
+            id: uuidv4(),
             createdAt: ic.time(),
             numberOfViews: BigInt(0),
             commentIds: [],
-            ...payload,
-        }
+            title: payload.title,
+            content: payload.content,
+            author: payload.author
+        };
         blogPostStorage.insert(blogPost.id, blogPost);
 
-        return Ok('blog post created successfully');
-    }),
+        return Result.Ok('Blog post created successfully');
+    } catch (error) {
+        return Result.Err<string, string>('Failed while trying to create a blog post');
+    }
+}
 
-    updateBlogPost: update([BlogPostPayload, Principal], Result(text, text), (payload, blogPostID) => {
-        const blogPostOpt = blogPostStorage.get(blogPostID);
-        if ('None' in blogPostOpt) {
-            return Err(`a blog post with id=${blogPostID} not found`);
-        }
+// Update an existing blog post
+$update
+export function updateBlogPost(payload: BlogPostPayload, blogPostID: string): Result<BlogPost, string> {
+    // Validate parameters
+    if (!blogPostID) {
+        return Result.Err<BlogPost, string>('Invalid parameters for updating a blog post');
+    }
 
-        const blogPost = blogPostOpt.Some;
+    // Validate payload properties
+    if (!payload.title || !payload.content || !payload.author) {
+        return Result.Err<BlogPost, string>('Invalid payload for creating a blog post');
+    }
+    const blogPostOpt = blogPostStorage.get(blogPostID);
 
-        const updatedBlogPost: typeof BlogPost = {
-            ...blogPost,
-            ...payload,
-        };
+    return match(blogPostOpt, {
+        Some: (blogPost) => {
 
-        blogPostStorage.insert(blogPost.id, updatedBlogPost);
+            // Set each property individually instead of spreading the payload
+            const updatedBlogPost: BlogPost = {
+                ...blogPost,
+                title: payload.title,
+                content: payload.content,
+                author: payload.author
+            };
 
-        return Ok('blog post updated successfully');
-    }),
+            blogPostStorage.insert(blogPost.id, updatedBlogPost);
 
-    deleteBlogPost: update([Principal], Result(text, text), (id) => {
-        if (!blogPostStorage.get(id)) {
-            return Err(`a blog post with id=${id} not found`);
-        }
+            return Result.Ok<BlogPost, string>(updatedBlogPost);
+        },
+        None: () => Result.Err<BlogPost, string>(`A blog post with id=${blogPostID} not found`),
+    });
+}
 
-        blogPostStorage.remove(id);
-        return Ok('blog post deleted successfully');
-    }),
+// Delete functions
 
-    // COMMENTS
-    addComment: update([CommentPayload, Principal], Result(text, text), (payload, blogPostID) => {
-        const blogPostOpt = blogPostStorage.get(blogPostID);
-        if ('None' in blogPostOpt) {
-            return Err(`a blog post with id=${blogPostID} not found`);
-        }
+// Delete a blog post
+$update
+export function deleteBlogPost(id: string): Result<string, string> {
+    // Validate parameters
+    if (!id) {
+        return Result.Err<string, string>('Invalid parameters for deleting a blog post');
+    }
 
-        const blogPost = blogPostOpt.Some;
+    const blogPostOpt = blogPostStorage.get(id);
 
-        const comment: typeof Comment = {
-            id: generateId(),
-            blogPostId: blogPost.id,
-            createdAt: ic.time(),
-            ...payload,
-        };
+    return match(blogPostOpt, {
+        Some: () => {
+            blogPostStorage.remove(id);
+            return Result.Ok<string, string>('Blog post deleted successfully');
+        },
+        None: () => Result.Err<string, string>(`A blog post with id=${id} not found`),
+    });
+}
 
-        commentStorage.insert(comment.id, comment);
-        blogPost.commentIds.push(comment.id);
-        blogPostStorage.insert(blogPost.id, blogPost);
+// Create a new comment for a blog post
+$update
+export function addComment(payload: CommentPayload, blogPostID: string): Result<string, string> {
+    // Validate parameters
+    if (!blogPostID) {
+        return Result.Err<string, string>('Invalid parameters for adding a comment');
+    }
 
-        return Ok('comment created successfully');
-    }),
+    const blogPostOpt = blogPostStorage.get(blogPostID);
 
-    getCommentsByBlogPost: query([Principal], Result(Vec(Comment), text), (blogPostID) => {
-        const blogPostOpt = blogPostStorage.get(blogPostID);
-        if ('None' in blogPostOpt) {
-            return Err(`a blog post with id=${blogPostID} not found`);
-        }
+    return match(blogPostOpt, {
+        Some: (blogPost) => {
+            // Validate payload properties
+            if (!payload.authorName || !payload.content) {
+                return Result.Err<string, string>('Invalid payload for adding a comment');
+            }
 
-        const blogPost = blogPostOpt.Some;
-        const blogPostComments = commentStorage.values().filter(
-            (comment: typeof Comment) =>
-                comment.blogPostId.toText() === blogPost.id.toText()
-        );
+            // Set each property individually instead of spreading the payload
+            const comment: CommentType = {
+                id: uuidv4(),
+                blogPostId: blogPost.id,
+                createdAt: ic.time(),
+                ...payload,
+            };
 
-        return Ok(blogPostComments);
-    }),
+            commentStorage.insert(comment.id, comment);
+            blogPost.commentIds.push(comment.id);
+            blogPostStorage.insert(blogPost.id, blogPost);
 
-    getMostPopularBlogPosts: query([int], Result(Vec(BlogPost), text), (numberOfBlogPosts) => {
-        const blogPosts = blogPostStorage.values()
-        blogPosts.sort((a: typeof BlogPost, b: typeof BlogPost) => {
+            return Result.Ok<string, string>('Comment created successfully');
+        },
+        None: () => Result.Err<string, string>(`A blog post with id=${blogPostID} not found`),
+    });
+}
+
+// Query functions
+
+// Retrieve comments for a blog post
+$query
+export function getCommentsByBlogPost(blogPostID: string): Result<Vec<CommentType>, string> {
+    // Validate parameters
+    if (!blogPostID) {
+        return Result.Err<Vec<CommentType>, string>('Invalid parameters for getting comments');
+    }
+
+    const blogPostOpt = blogPostStorage.get(blogPostID);
+
+    return match(blogPostOpt, {
+        Some: (blogPost) => {
+            const blogPostComments = commentStorage.values().filter(
+                (comment: CommentType) => comment.blogPostId === blogPost.id
+            );
+
+            return Result.Ok<Vec<CommentType>, string>(blogPostComments);
+        },
+        None: () => Result.Err<Vec<CommentType>, string>(`A blog post with id=${blogPostID} not found`),
+    });
+}
+
+// Retrieve most popular blog posts
+$query
+export function getMostPopularBlogPosts(numberOfBlogPosts: int): Result<Vec<BlogPost>, string> {
+    try {
+        const blogPosts = blogPostStorage.values();
+        blogPosts.sort((a: BlogPost, b: BlogPost) => {
             const aPopularity = a.commentIds.length + Number(a.numberOfViews);
             const bPopularity = b.commentIds.length + Number(b.numberOfViews);
 
             return aPopularity - bPopularity;
         });
 
-        return Ok(blogPosts.slice(0, Number(numberOfBlogPosts)));
-    }),
-
-});
-
-function generateId(): Principal {
-    const randomBytes = new Array(29)
-        .fill(0)
-        .map((_) => Math.floor(Math.random() * 256));
-
-    return Principal.fromUint8Array(Uint8Array.from(randomBytes));
+        return Result.Ok(blogPosts.slice(0, Number(numberOfBlogPosts)));
+    } catch (error) {
+        return Result.Err<Vec<BlogPost>, string>('Failed while trying to get most popular blog posts');
+    }
 }
 
-// a workaround to make uuid package work with Azle
+// A workaround to make the uuid package work with Azle
 globalThis.crypto = {
     // @ts-ignore
     getRandomValues: () => {
