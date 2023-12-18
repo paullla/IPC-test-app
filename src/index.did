@@ -1,6 +1,7 @@
 type BlogPost = record {
   id : text;
   title : text;
+  "principal" : principal;
   content : text;
   createdAt : nat64;
   author : text;
@@ -11,6 +12,7 @@ type BlogPostPayload = record { title : text; content : text; author : text };
 type CommentPayload = record { content : text; authorName : text };
 type CommentType = record {
   id : text;
+  "principal" : principal;
   content : text;
   createdAt : nat64;
   authorName : text;
@@ -28,6 +30,6 @@ service : () -> {
   getBlogPosts : () -> (_AzleResult_1) query;
   getCommentsByBlogPost : (text) -> (_AzleResult_2) query;
   getMostPopularBlogPosts : (int) -> (_AzleResult_1) query;
-  getSingleBlogPost : (text) -> (_AzleResult_3) query;
+  getSingleBlogPost : (text) -> (_AzleResult_3);
   updateBlogPost : (BlogPostPayload, text) -> (_AzleResult_4);
 }
